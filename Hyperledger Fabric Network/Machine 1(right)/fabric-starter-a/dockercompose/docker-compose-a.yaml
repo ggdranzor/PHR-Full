@@ -1,0 +1,139 @@
+#
+# Copyright Altoros. All Rights Reserved.
+#
+
+version: '2'
+
+volumes:
+  peer0.a.example.com:
+  peer1.a.example.com:
+
+services:
+
+  ca.a.example.com:
+    container_name: ca.a.example.com
+    image: hyperledger/fabric-ca:x86_64-1.1.0
+    environment:
+      - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
+      - FABRIC_CA_SERVER_CA_NAME=ca.a.example.com
+      - FABRIC_CA_SERVER_CA_CERTFILE=/etc/hyperledger/fabric-ca-server-config/ca.a.example.com-cert.pem
+      - FABRIC_CA_SERVER_CA_KEYFILE=/etc/hyperledger/fabric-ca-server-config/c6157efecbe206be085efa8082ff1966ea26c943eea1f8da3f600a8807b2e3b4_sk
+      - FABRIC_CA_SERVER_TLS_ENABLED=true
+      - FABRIC_CA_SERVER_TLS_CERTFILE=/etc/hyperledger/fabric-ca-server-config/ca.a.example.com-cert.pem
+      - FABRIC_CA_SERVER_TLS_KEYFILE=/etc/hyperledger/fabric-ca-server-config/c6157efecbe206be085efa8082ff1966ea26c943eea1f8da3f600a8807b2e3b4_sk
+    ports:
+      - 7054:7054
+    command: sh -c 'fabric-ca-server start -b admin:adminpw -d'
+    volumes:
+      - ../artifacts/crypto-config/peerOrganizations/a.example.com/ca/:/etc/hyperledger/fabric-ca-server-config
+      - ../artifacts/fabric-ca-server-config-a.yaml:/etc/hyperledger/fabric-ca-server/fabric-ca-server-config.yaml
+
+  peer0.a.example.com:
+    container_name: peer0.a.example.com
+    extends:
+      file: base-intercept.yaml
+      service: peer-base
+    environment:
+      - CORE_PEER_ID=peer0.a.example.com
+      - CORE_PEER_LOCALMSPID=aMSP
+      - CORE_PEER_ADDRESS=peer0.a.example.com:7051
+      - CORE_CHAINCODE_STARTUPTIMEOUT=1200s
+
+    ports:
+      - 7051:7051
+      - 7053:7053
+    volumes:
+        - ../artifacts/crypto-config/peerOrganizations/a.example.com/peers/peer0.a.example.com/:/etc/hyperledger/crypto/peer
+        - peer0.a.example.com:/var/hyperledger/production
+    depends_on:
+      - ca.a.example.com
+    extra_hosts:
+      - orderer.example.com:130.147.175.222
+
+  peer1.a.example.com:
+    container_name: peer1.a.example.com
+    extends:
+      file: base-intercept.yaml
+      service: peer-base
+    environment:
+      - CORE_PEER_ID=peer1.a.example.com
+      - CORE_PEER_LOCALMSPID=aMSP
+      - CORE_PEER_ADDRESS=peer1.a.example.com:7051
+      - CORE_CHAINCODE_STARTUPTIMEOUT=1200s
+
+    ports:
+      - 7056:7051
+      - 7058:7053
+    volumes:
+        - ../artifacts/crypto-config/peerOrganizations/a.example.com/peers/peer1.a.example.com/:/etc/hyperledger/crypto/peer
+        - peer1.a.example.com:/var/hyperledger/production
+    depends_on:
+      - ca.a.example.com
+    extra_hosts:
+      - orderer.example.com:130.147.175.222
+
+  # fabric-rest api server
+  api.a.example.com:
+    extends:
+      file: base-intercept.yaml
+      service: api-base
+    container_name: api.a.example.com
+    ports:
+      - 4000:4000
+    environment:
+      - ORG=a
+      - PORT=4000
+ #   volumes:
+ #     - ../artifacts/hosts/a/api_hosts:/etc/hosts
+    depends_on:
+      - peer0.a.example.com
+      - peer1.a.example.com
+    extra_hosts:
+      - orderer.example.com:130.147.175.222
+      - peer0.b.example.com:130.147.175.150
+      - peer0.c.example.com:130.147.175.150
+      - peer1.b.example.com:130.147.175.150
+      - peer1.c.example.com:130.147.175.150
+
+  cli.example.com:
+    container_name: cli.example.com
+    extends:
+      file: base-intercept.yaml
+      service: cli-base
+    volumes:
+      - ../artifacts/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls:/etc/hyperledger/crypto/orderer/tls
+
+  cli.a.example.com:
+    container_name: cli.a.example.com
+    extends:
+      service: cli.example.com
+    environment:
+      - CORE_PEER_LOCALMSPID=aMSP
+    volumes:
+    #    - ../artifacts/hosts/a/cli_hosts:/etc/hosts
+        - ../artifacts/crypto-config/peerOrganizations/a.example.com/users/Admin@a.example.com:/etc/hyperledger/crypto/peer
+    extra_hosts:
+      - orderer.example.com:130.147.175.222
+      - www.example.com:130.147.175.222
+      - www.a.example.com:130.147.175.222
+      - www.b.example.com:130.147.175.150
+      - www.c.example.com:130.147.175.150
+
+  cliNoCryptoVolume.a.example.com:
+    container_name: cliNoCryptoVolume.a.example.com
+    extends:
+      file: base-intercept.yaml
+      service: cli-base
+    environment:
+      - CORE_PEER_LOCALMSPID=aMSP
+    volumes:
+        - ../artifacts/hosts/a/cli_hosts:/etc/hosts
+
+  # simple http server to disseminate certificates
+  www.a.example.com:
+    extends:
+      file: base-intercept.yaml
+      service: www-base
+    container_name: www.a.example.com
+    ports:
+      - 8081:80
